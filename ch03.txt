@@ -1,0 +1,63 @@
+ch03. 사용자 및 권한
+
+3.1. 사용자 식별
+
+'duki0105'@'IP_Address'
+'duki0105'@'%'
+와 같이 아이디가 같은 2개의 유저가 존재할 때,
+mysql은 범위가 더 작은 ip_address의 아이디를 인식한다.
+
+3.2. 사용자 계정 관리
+
+3.2.1. 시스템 계정과 일반 계정
+system_user 권한을 가지고 있으면 시스템 계정이고, 그렇지 않으면 일반계정이다.
+시스템계정이 할 수 있는 역할은
+1.계정관리
+2.다른 세션 또는 그 세션에서 실행 중인 쿼리를 강제 종료
+3.스토어드 프로그램 생성 시 definer를 타 사용자로 설정
+
+3.2.2. 계정 생성
+mysql 8.0부터는 계정의 생성은 create user, 권한 부여는 grant명령으로 구분해서 실행한다.
+
+1.identified with
+사용자의 인증방식과 비밀번호를 설정
+
+[1]mysql에서 제공하는 인증방식
+{1}native pluggable authentication
+비밀번호에 대한 sha-1의 해시값을 저장해두고, 해시값 비교
+
+{2}caching sha-2 pluggable authentication
+sha-2알고리즘 도입
+sha-2는 수천번의 해시 계산을 수행해서 결과를 만들어내기 때문에 동일한 키 값에 대해서도 결과가 달라진다.
+해시값을 계산하는 방식은 상당히 시간 소모적이어서 성능이 떨어지는데, 이를 보안하기 위해
+mysql 서버는 해시 결과값을 메모리에 캐시해서 사용한다.
+이 인증 방식은 ssl/tls rsa 키페어를 반드시 사용해야 한다.
+
+{3}pam pluggable authentication
+유닉스라 리눅스 패스워드 또는 LDAP같은 외부 인증을 사용.
+유료버전만 가능
+
+{4}LDAP pluggable authentication
+(ligthweight directory access protocool)
+LDAP를 이용한 외부 인증을 사용
+유료버전만 가능
+
+3.3비밀번호 관리
+3.3.1 이중 비밀번호
+DB의 비밀번호를 바꾸려면 접속을 차단해야 하는데 불가능하다.
+그래서 이중 비밀번호를 사용하는데 primary password가 새로운 비밀번호, secondary password가 이전 비밀번호이다.
+
+3.4 권한
+글로벌 권한(*): 모든 db의 오브젝트에 접속가능
+DB권한: 특정 DB에만 접속가능
+특정 테이블 권한: db의 특정테이블에 대한 권한만 따로 줄 수 있다.
+ex)
+grant select,update(dept_name) on employees.department to 'user'@'localhost';
+employee DB의 department테이블에서 dept_name 칼럼만 업데이트할 수 있는 권한을 준 것
+위와 같이 칼럼 단위의 권한이 하나라도 설정되면 나머지 모든 테이블의 모든 칼럼에 대해서도
+권한체크를 하기 때무에 전체적인 성능에 영향을 미칠 수 있다.
+만약 칼럼 단위의 접근 권한이 필요하다면 뷰를 만들어 사용하는 방법도 생각해볼 수 있다.
+
+
+*
+스토어드 프로그램
