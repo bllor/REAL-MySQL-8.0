@@ -1,0 +1,129 @@
+leftJoin('tbInovation', 'ti', 'ti.articleKey = ta.articleKey AND ti.actId = ta.actId')
+articleKey에서 매치가 안되면 actId로 매치를 시킨다.
+
+--------------------------------------------------------------------------------------------
+
+getRawMany() 
+조회결과를 엔티티 인스턴스로 변환하지 않고, 쿼리 결과를 직접적으로 반환한다.
+그리고 별명을 지을 수 있다. & 서브쿼리 사용가능
+
+getRawOne() 하나의 데이터만 얻을 때 사용한다.
+
+from(${subQuery.clone().select([]).getQuery()}),'A' <-서브쿼리의 결과를A로 한다.
+subQuery.clone()을 통해 subQuery를 복제하고, getQuery()를 호출하는 시점에서 
+서브쿼리가 실행되고, 해당 결과가 SQL문자열로 변환된다.
+
+--------------------------------------------------------------------------------------------
+result.aggregations.group_by_actId.buckets
+
+const aggs = {
+      group_by_actId: {
+        terms: {
+          field: 'actId.keyword',
+          size: 10000,
+        },
+        aggs: {
+          top_hits: {
+            top_hits: {
+              size: 1,
+            },
+          },
+        },
+      },
+집계를 했을 때 결과를 buckets에 담아 불러오는 것
+버킷에는 해당 데이터 그룹에 대한 정보를 가지고 있다.
+group_by_actId : 집계함수의 이름으로, actId.keyword를 기준으로 그룹화를 한다.
+각 그룹에서는 top_hits집계를 사용하여 각 그룹에서 가장 상위의 문서 하나를 선택한다.
+size옵션을 사용하여 각 그룹에서 반환할 문서의 수를 정할 수 있는데,
+size를 1로 지정하여 각 그룹에서 가장 상위의 문서 하나만 반환한다.
+--------------------------------------------------------------------------------------------
+innovationInfo = await this.dataSource
+        .createQueryBuilder()
+        .select(['actId'])
+        .from('tbInovation', 'ti')
+        .where('actId IN (:...actIds)', { actIds })
+        .getRawMany();
+...actIds에서 ...은 배열을 풀어서 각 요소를 개별적인 인자로 전달
+
+--------------------------------------------------------------------------------------------
+result.aggregations.group_by_actId.buckets.map((el) => {
+      el.top_hits.hits.hits[0]._source.regulationYN = 
+	regulationInfo.find((info) => info.actId === el.top_hits.hits.hits[0]._source.actId, )
+        ? 'Y': 'N';
+});
+aggregations.group_by_actId.buckets의 각각의 결과를 el로 받고,
+regulationInfo에서의 actId와 el.top_hits.hits.hits[0]._source.actId의 값이 같으면
+el.top_hits.hits.hits[0]._source.regulationYN 에 Y로 저장하며, 다르면 N으로 저장한다.
+
+--------------------------------------------------------------------------------------------
+ if (data.regulationYN === 'Y') {
+      result.aggregations.group_by_actId.buckets = 
+	result.aggregations.group_by_actId.buckets.filter((el) => {
+        return regulationInfo.find((info) => info.actId === el.top_hits.hits.hits[0]._source.actId);
+      });
+    }
+data.regulationYN === 'Y'인경우,
+regulationInfo.find((info) => info.actId === el.top_hits.hits.hits[0]._source.actId)
+regulationInfo의 actId와 el.top_hits.hits.hits[0]._source.actId가 일치하는 경우에,
+result.aggregations.group_by_actId.buckets에 저장한다.
+여기서 filter는 주어진 조건에 맞는 요소만을 가지고 새로운 배열을 만든다.
+
+--------------------------------------------------------------------------------------------
+if (!data.search) {
+      sortedBuckets = result.aggregations.group_by_actId.buckets.sort((a, b) => {
+        return a.top_hits.hits.hits[0]._source.act.localeCompare(b.top_hits.hits.hits[0]._source.act);
+      });
+    } else {
+      sortedBuckets = result.aggregations.group_by_actId.buckets;
+    }
+
+data.search값이 없을 때,
+배열 result.aggregations.group_by_actId.buckets의 요소를 순차적으로  
+a.top_hits.hits.hits[0]._source.act,  b.top_hits.hits.hits[0]._source.act에 넣어서
+서로의 문자열을 비교한 다음 정렬한다.
+
+localeCompare는 두 문자열을 비교하는 함수로
+A localeCompare B에서 , a가 b보다 작을 경우 -1, b가 더 작을 경우 1, 둘이 같을 경우 0으로 반환된다..
+1로 반환되는 경우 B를 A앞에 위치 시켜서 배열을 정렬하고, -1 ,0으로 반환되는 경우도 변경하지 않고
+그대로 순서를 유지한다.
+
+--------------------------------------------------------------------------------------------
+budget.service - searchBudgetList
+
+const sortedResult = result.hits.hits.sort((a, b) => {
+      if (a._source.grantYN === 'Y' && b._source.grantYN === 'N') {
+        return -1;
+      } else if (a._source.grantYN === 'N' && b._source.grantYN === 'Y') {
+        return 1;
+      } else if (a._source.businessNo !== b._source.businessNo) {
+        return a._source.businessNo - b._source.businessNo;
+      } else {
+        return b._source.year - a._source.year;
+      }
+    });
+여기서 사용되는 sort는 자바스크립트의 메서드이다.
+
+ if (a._source.grantYN === 'Y' && b._source.grantYN === 'N') {
+        return -1;
+      } else if (a._source.grantYN === 'N' && b._source.grantYN === 'Y') {
+        return 1;
+--> source.grantYN의 속성이 Y인 값이 먼저오고, 그 다음에 N인 값이 온다.
+
+ else if (a._source.businessNo !== b._source.businessNo) {
+        return a._source.businessNo - b._source.businessNo;
+--> a와 b의 grantYN값이 같을 경우, businessNo값을 기준으로 정렬하며,
+	양수일 경우, b._source.businessNo값이 a보다 앞에 배치된다.
+
+grantYN값과 buninessNo값도 같을 경우 year를 기준으로 배치한다.
+
+--------------------------------------------------------------------------------------------
+sortedResult.slice(data.offset, data.limit + data.offset)
+sortedResult배열에서 data.offset인덱스부터 시작하여 (data.limit+data.offset-1)인덱스까지의 요소들을 추출하여 새로운 배열을 반환한다.
+
+offset은 어디서 부터 가져올지 나타내고, limit는 몇개를 가져올지 나타냄
+ex)
+limit 10 -> 0~10
+limit 100 10 -> 100번부터 110번까지
+limit 20 offset 5 -> 5~25번 가져오기
+
+--------------------------------------------------------------------------------------------
